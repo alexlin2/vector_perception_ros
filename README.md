@@ -50,7 +50,7 @@ This is a Python-only package that also generates custom messages.
 ```bash
 # Clone the repository
 cd ~/ros2_ws/src
-git clone <repository_url>
+git clone https://github.com/alexlin2/vector_perception_ros.git
 
 # Build the package
 cd ~/ros2_ws
