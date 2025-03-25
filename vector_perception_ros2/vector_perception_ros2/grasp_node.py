@@ -6,6 +6,7 @@ from sensor_msgs.msg import Image, PointCloud2
 from sensor_msgs_py import point_cloud2
 from visualization_msgs.msg import MarkerArray, Marker
 from geometry_msgs.msg import PoseStamped, PoseArray, Pose
+from std_msgs.msg import Int32
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from cv_bridge import CvBridge
 import numpy as np
@@ -15,13 +16,15 @@ from scipy.spatial.transform import Rotation
 from gsnet import AnyGrasp
 from vector_perception_msgs.msg import Object3DArray
 
+
 class AnyGraspSimpleNode(Node):
     def __init__(self):
         super().__init__('anygrasp_node')
 
         # Fixed parameters
-        self.process_all_objects = True  # Process all detected objects
+        self.process_all_objects = False  # Changed to False to process only selected object
         self.checkpoint_path = os.path.join(os.path.dirname(__file__), 'checkpoint_detection.tar')
+        self.selected_track_id = None  # Track ID of the selected object
 
         # Initialize components
         self.bridge = CvBridge()
@@ -40,6 +43,14 @@ class AnyGraspSimpleNode(Node):
             slop=0.1
         )
         self.sync.registerCallback(self.sync_callback)
+
+        # Create subscriber for track ID selection
+        self.track_id_sub = self.create_subscription(
+            Int32,
+            '/grasp/selected_track_id',
+            self.track_id_callback,
+            10
+        )
 
         # Create publishers
         self.grasp_markers_pub = self.create_publisher(MarkerArray, '/grasp/markers', 10)
@@ -74,7 +85,10 @@ class AnyGraspSimpleNode(Node):
             self.get_logger().error(f'Failed to initialize AnyGrasp: {str(e)}')
             self.anygrasp = None
 
-    # We don't need object size calculation anymore as we process all objects
+    def track_id_callback(self, msg):
+        """Callback for track ID selection."""
+        self.selected_track_id = msg.data
+        self.get_logger().info(f'Selected track ID: {self.selected_track_id}')
 
     def sync_callback(self, objects_msg, color_msg):
         """Process synchronized Object3DArray and color image messages."""
@@ -89,10 +103,21 @@ class AnyGraspSimpleNode(Node):
 
             # Convert color image to OpenCV format
             color_img = self.bridge.imgmsg_to_cv2(color_msg, 'bgr8')
-            self.get_logger().info(f"Processing {len(objects_msg.objects)} objects")
 
-            # Use all detected objects
-            selected_objects = objects_msg.objects
+            # Filter objects based on selected track ID if one is specified
+            if self.selected_track_id is not None:
+                selected_objects = [obj for obj in objects_msg.objects if obj.target_id == self.selected_track_id]
+                if not selected_objects:
+                    self.get_logger().info(
+                        f"Selected object (track ID {self.selected_track_id}) not found, "
+                        "processing all objects"
+                    )
+                    selected_objects = objects_msg.objects
+                else:
+                    self.get_logger().info(f"Processing object with track ID {self.selected_track_id}", throttle_duration_sec=2.0)
+            else:
+                self.get_logger().info("No track ID selected, processing all objects", throttle_duration_sec=2.0)
+                selected_objects = objects_msg.objects
 
             # Create a combined point cloud
             combined_points = []
@@ -165,9 +190,6 @@ class AnyGraspSimpleNode(Node):
             # Convert to float format expected by AnyGrasp (0-1 range)
             colors = pixel_colors.astype(np.float32) / 255.0
 
-            # Alternatively, just use a solid color if the above approach is problematic
-            # colors = np.ones_like(points) * np.array([0.5, 0.5, 0.5])
-
             # Define workspace limits (can be adjusted based on camera frame)
             xmin, xmax = points[:, 0].min() - 0.2, points[:, 0].max() + 0.2
             ymin, ymax = points[:, 1].min() - 0.2, points[:, 1].max() + 0.2
@@ -180,12 +202,8 @@ class AnyGraspSimpleNode(Node):
             combined_pc_msg = self.create_point_cloud_msg(points, colors, objects_msg.header)
             self.combined_cloud_pub.publish(combined_pc_msg)
 
-            # Log information for debugging
-            self.get_logger().info(f"Points shape: {points.shape}, Colors shape: {colors.shape}")
-
             # Call AnyGrasp to get grasp poses
             try:
-                self.get_logger().info("Calling AnyGrasp to compute grasps...")
                 gg, cloud = self.anygrasp.get_grasp(
                     points,
                     colors,
@@ -194,7 +212,7 @@ class AnyGraspSimpleNode(Node):
                     dense_grasp=False,  # Use dense grasp to get more candidates
                     collision_detection=True
                 )
-                self.get_logger().info(f"Found {len(gg)} grasp candidates")
+                self.get_logger().info(f"Found {len(gg)} grasp candidates", throttle_duration_sec=1.0)
             except Exception as e:
                 self.get_logger().error(f"AnyGrasp error: {str(e)}")
                 return
@@ -207,7 +225,7 @@ class AnyGraspSimpleNode(Node):
             gg = gg.nms().sort_by_score()
 
             # Select top N grasps - show more since we're processing all objects
-            num_grasps = min(50, len(gg))
+            num_grasps = min(10, len(gg))
             top_grasps = gg[:num_grasps]
 
             # Publish grasp markers
@@ -380,6 +398,7 @@ class AnyGraspSimpleNode(Node):
         # Publish pose
         self.grasp_poses_pub.publish(pose_msg)
 
+
 def main(args=None):
     rclpy.init(args=args)
     node = AnyGraspSimpleNode()
@@ -390,6 +409,7 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

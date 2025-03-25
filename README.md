@@ -110,6 +110,9 @@ The grasp detection node publishes on the following topics:
 - `/grasp/poses` (geometry_msgs/PoseArray): Array of all detected grasp poses
 - `/grasp/pointcloud` (sensor_msgs/PointCloud2): Combined point cloud used for grasp detection
 
+And subscribes to:
+- `/grasp/selected_track_id` (std_msgs/Int32): Track ID of the object to generate grasps for. If no track ID is selected or if the selected object is not found, grasps will be generated for all detected objects.
+
 ## Grasp Detection
 
 For grasp detection functionality using AnyGrasp:
@@ -117,6 +120,15 @@ For grasp detection functionality using AnyGrasp:
 ```bash
 # Launch the grasp detection node 
 ros2 run vector_perception_ros2 grasp_node
+
+# Select an object by publishing its track ID (optional)
+ros2 topic pub /grasp/selected_track_id std_msgs/Int32 "data: 1"
 ```
+
+The node will:
+- Generate grasps for all detected objects by default
+- If a track ID is selected, it will focus on that specific object
+- If the selected object is not found, it will fall back to processing all objects
+- Continue to publish all grasp poses and visualization markers
 
 More information about the AnyGrasp integration can be found in the `anygrasp_external_usage.md` file.

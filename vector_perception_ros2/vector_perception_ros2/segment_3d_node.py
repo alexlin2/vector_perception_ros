@@ -46,7 +46,7 @@ class Segment3DNode(Node):
         
         # Initialize segmenter
         self.segmenter = Sam2DSegmenter(
-            model_path='/home/alexlin/robot/perception/models/FastSAM-s.engine',
+            model_path='FastSAM-s.pt',
             use_tracker=enable_tracking,
             use_analyzer=enable_analysis,
             min_analysis_interval=min_analysis_interval if enable_analysis else 0.0
