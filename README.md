@@ -93,11 +93,22 @@ ros2 run vector_perception_ros2 segment_3d_node \
 
 ## Topics
 
-The node publishes on the following topics:
+### Segmentation Node Topics
+
+The segmentation node publishes on the following topics:
 
 - `/segmented_objects` (sensor_msgs/PointCloud2): Combined point cloud of all segmented objects
 - `/detection_visualization` (sensor_msgs/Image): Image with visualization of detected objects
 - `/detected_objects` (vector_perception_ros2/Object3DArray): Array of detected objects with detailed information
+
+### Grasp Detection Node Topics
+
+The grasp detection node publishes on the following topics:
+
+- `/grasp/markers` (visualization_msgs/MarkerArray): Visualization markers for grasp poses
+- `/grasp/pose` (geometry_msgs/PoseStamped): Pose of the best grasp candidate
+- `/grasp/poses` (geometry_msgs/PoseArray): Array of all detected grasp poses
+- `/grasp/pointcloud` (sensor_msgs/PointCloud2): Combined point cloud used for grasp detection
 
 ## Grasp Detection
 

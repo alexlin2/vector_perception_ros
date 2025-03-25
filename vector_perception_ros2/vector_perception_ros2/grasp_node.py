@@ -5,7 +5,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image, PointCloud2
 from sensor_msgs_py import point_cloud2
 from visualization_msgs.msg import MarkerArray, Marker
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseArray, Pose
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 from cv_bridge import CvBridge
 import numpy as np
@@ -44,6 +44,7 @@ class AnyGraspSimpleNode(Node):
         # Create publishers
         self.grasp_markers_pub = self.create_publisher(MarkerArray, '/grasp/markers', 10)
         self.grasp_poses_pub = self.create_publisher(PoseStamped, '/grasp/pose', 10)
+        self.all_grasp_poses_pub = self.create_publisher(PoseArray, '/grasp/poses', 10)
         self.combined_cloud_pub = self.create_publisher(PointCloud2, '/grasp/pointcloud', 10)
 
         self.get_logger().info('AnyGrasp simple node initialized')
@@ -212,6 +213,9 @@ class AnyGraspSimpleNode(Node):
             # Publish grasp markers
             self.publish_grasp_markers(top_grasps, frame_id, stamp)
 
+            # Publish all grasp poses as array
+            self.publish_all_grasps(top_grasps, frame_id, stamp)
+            
             # Publish best grasp pose
             if len(top_grasps) > 0:
                 self.publish_best_grasp(top_grasps[0], frame_id, stamp)
@@ -318,6 +322,38 @@ class AnyGraspSimpleNode(Node):
 
         # Return in the format expected by ROS (x, y, z, w)
         return quat
+
+    def publish_all_grasps(self, grasps, frame_id, stamp):
+        """Publish all grasp poses as a PoseArray."""
+        # Create PoseArray message
+        pose_array_msg = PoseArray()
+        pose_array_msg.header.frame_id = frame_id
+        pose_array_msg.header.stamp = stamp
+        
+        # Add each grasp pose to the array
+        for grasp in grasps:
+            # Get grasp parameters
+            translation = grasp.translation
+            rotation = grasp.rotation_matrix
+            
+            # Create Pose message
+            pose = Pose()
+            pose.position.x = translation[0]
+            pose.position.y = translation[1]
+            pose.position.z = translation[2]
+            
+            # Convert rotation matrix to quaternion
+            q = self.rotation_matrix_to_quaternion(rotation)
+            pose.orientation.x = q[0]
+            pose.orientation.y = q[1]
+            pose.orientation.z = q[2]
+            pose.orientation.w = q[3]
+            
+            # Add to array
+            pose_array_msg.poses.append(pose)
+        
+        # Publish pose array
+        self.all_grasp_poses_pub.publish(pose_array_msg)
 
     def publish_best_grasp(self, grasp, frame_id, stamp):
         """Publish the best grasp pose."""
